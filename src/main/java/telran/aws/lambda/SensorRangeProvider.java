@@ -25,27 +25,27 @@ public class SensorRangeProvider implements RequestHandler<Map<String, Object>, 
 	@Override
 	public SensorRange handleRequest(Map<String, Object> event, Context context) {
 		LambdaLogger logger = context.getLogger();
-		SensorRange result = null;
-		try {
-			Map<String, Object> mapParameters = (Map<String, Object>) event.get("pathParameters");
-			if (mapParameters == null) {
-				throw new IllegalArgumentException("request doesn`t contain parameters");
-			}
-			logger.log("debug: mapParameters " + mapParameters.toString());
-			String sensorIdStr = (String) mapParameters.get("id");
-			if (sensorIdStr == null) {
-				throw new IllegalArgumentException("no id parameter");
-			}
-			long sensorId = Long.parseLong(sensorIdStr);
-			logger.log("received sensorID " + sensorId);
-			// **********
-			Document document = getDocument(sensorId);
-			result = new SensorRange(Float.parseFloat(document.get("minValue").toString()),
-					Float.parseFloat(document.get("maxValue").toString()));
-			logger.log("debug: result is " + result);
-		} catch (Exception e) {
-			logger.log("error:" + e.toString());
+		Map<String, Object> mapParameters = (Map<String, Object>) event.get("pathParameters");
+		if (mapParameters == null) {
+			logger.log("error: request doesn`t contain parameters");
+			throw new IllegalArgumentException("request doesn`t contain parameters");
 		}
+		logger.log("debug: mapParameters " + mapParameters.toString());
+		String sensorIdStr = (String) mapParameters.get("id");
+		if (sensorIdStr == null) {
+			logger.log("error: no id parameter");
+			throw new IllegalArgumentException("no id parameter");
+		}
+		long sensorId = Long.parseLong(sensorIdStr);
+		logger.log("received sensorID " + sensorId);
+		Document document = getDocument(sensorId);
+		if (document == null) {
+			logger.log("error: " + String.format("sensor with id %d doesn`t exist", sensorId));
+			throw new NoSuchElementException(String.format("sensor with id %d doesn`t exist", sensorId));
+		}
+		SensorRange result = new SensorRange(Float.parseFloat(document.get("minValue").toString()),
+				Float.parseFloat(document.get("maxValue").toString()));
+		logger.log("debug: result is " + result);
 		return result;
 	}
 
@@ -53,9 +53,6 @@ public class SensorRangeProvider implements RequestHandler<Map<String, Object>, 
 		MongoDatabase mongoDB = mongoClient.getDatabase(dbName);
 		MongoCollection<Document> mongoCollection = mongoDB.getCollection(collectionName);
 		Document document = mongoCollection.find(new Document("_id", sensorId)).first();
-		if(document == null) {
-			throw new NoSuchElementException(String.format("sensor with id %d doesn`t exist", sensorId));
-		}
 		return document;
 	}
 }
