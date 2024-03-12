@@ -1,6 +1,5 @@
 package telran.aws.lambda;
 
-import java.util.HashMap;
 import java.util.Map;
 
 import com.amazonaws.services.lambda.runtime.Context;
@@ -11,13 +10,11 @@ import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import org.bson.Document;
-import org.json.simple.JSONObject;
 
-
-public class SensorRangeProvider implements RequestHandler<Map<String, Object>, String> {
+public class SensorRangeProvider implements RequestHandler<Map<String, Object>, SensorRange> {
 	private final MongoClient mongoClient;
-	private String dbName = "sensors";
-	private String collectionName = "sensor-ranges";
+	private String dbName = System.getenv("DB_NAME");
+	private String collectionName = System.getenv("COLLECTION_NAME");
 
 	public SensorRangeProvider() {
 		mongoClient = MongoClients.create(System.getenv("MONGODB_URI"));
@@ -25,9 +22,9 @@ public class SensorRangeProvider implements RequestHandler<Map<String, Object>, 
 
 	@SuppressWarnings("unchecked")
 	@Override
-	public String handleRequest(Map<String, Object> event, Context context) {
+	public SensorRange handleRequest(Map<String, Object> event, Context context) {
 		LambdaLogger logger = context.getLogger();
-		String response = null;
+		SensorRange response = null;
 		try {
 			Map<String, Object> mapParameters = (Map<String, Object>) event.get("pathParameters");
 			if (mapParameters == null) {
@@ -40,27 +37,26 @@ public class SensorRangeProvider implements RequestHandler<Map<String, Object>, 
 			}
 			long sensorId = Long.parseLong(sensorIdStr);
 			logger.log("received sensorID " + sensorId);
-			//**********
-			MongoDatabase mongoDB = mongoClient.getDatabase(dbName);
-			MongoCollection<Document> mongoCollection = mongoDB.getCollection(collectionName);
-			Document document = mongoCollection.find(new Document("_id", sensorId)).first();
+			// **********
+			Document document = getSensorRange(sensorId);
 			// *********
-			response = createResponse(document.toJson(), 200);
+			response = new SensorRange(Float.parseFloat(document.get("minValue").toString()),
+					Float.parseFloat(document.get("maxValue").toString()));
 			logger.log("debug: response is " + response);
 		} catch (Exception e) {
-			String body = e.toString();
-			logger.log("error:" + body);
-			response = createResponse(body, 400);
+			logger.log("error:" + e.toString());
+			response = null;
 		}
 		return response;
 	}
 
-	private String createResponse(String body, int statusCode) {
-		HashMap<String, Object> map = new HashMap<>();
-		map.put("status", statusCode);
-		map.put("body", body);
-		String jsonStr = JSONObject.toJSONString(map);
-		return jsonStr;
+	private Document getSensorRange(long sensorId) {
+		MongoDatabase mongoDB = mongoClient.getDatabase(dbName);
+		MongoCollection<Document> mongoCollection = mongoDB.getCollection(collectionName);
+		Document document = mongoCollection.find(new Document("_id", sensorId)).first();
+		return document;
 	}
+}
 
+record SensorRange(float minValue, float maxValue) {
 }
